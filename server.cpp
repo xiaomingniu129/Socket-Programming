@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdlib.h>
+#include <stdlib.h> 
 #include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -15,26 +15,41 @@ int main(int argc, char *argv[]) {
   }
 
   /* step 1: create socket at server-side */
-  int listenfd; // server-side socket
-  if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+  int listenfd; // server-side socket file descriptor, unix下一切都是文件, e.g. 0, 1, 2, ...
+  if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) { // 用于监听的socket
     perror("socket");
     return -1;
   }
 
-  /* step 2: bind socket with IP & Port Number */
-  struct sockaddr_in servaddr; // data structure of server-side address
-  memset(&servaddr, 0, sizeof(servaddr)); 
+  /* step 2: bind socket with IP & port number */
+  sockaddr_in servaddr; // Structure describing an Internet socket address: 用来表示ip和port number
+  memset(&servaddr, 0, sizeof(servaddr));
   servaddr.sin_family = AF_INET; // set protocol family
-  servaddr.sin_addr.s_addr = htonl(INADDR_ANY); // any IP address
-  // servaddr.sin_addr.s_addr = inet_addr("192.168.190.134"); // specific IP address
-  servaddr.sin_port = htons(atoi(argv[1])); // set port number
-  if (bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
+  servaddr.sin_addr.s_addr = htonl(INADDR_ANY); // any IP address: 
+  // servaddr.sin_addr.s_addr = inet_addr("192.168.190.134"); // set IP address
+  servaddr.sin_port = htons(atoi(argv[1])); // set port number, htons(): 使用网络字节顺序
+
+  /* bind */
+  if (bind(listenfd, (sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
     perror("bind");
     close(listenfd);
     return -1;
   }
 
-  /* step3: set socket to listen mode */
+  /* step3: set socket into listen mode */
+  /*
+    int listen(int sockfd, int backlog);
+    DESCRIPTION:
+      listen() marks the socket referred to by sockfd as a passive socket, that is, 
+      as a socket that will be used to accept in‐coming connection requests using accept(2).
+    ARGUMENTS:
+      1. The sockfd argument is a file descriptor that refers to a socket of type SOCK_STREAM or SOCK_SEQPACKET.
+      2. The backlog argument defines the max length to which the queue of the pending connections for sockfd may grow.
+         If a con‐nection request arrives when the queue is full, the client may
+         receive an error with an indication of ECONNREFUSED or, if the
+         underlying protocol supports retransmission, the  request  may
+         be ignored so that a later reattempt at connection succeeds.
+  */
   if (listen(listenfd, 5) != 0) {
     perror("listen");
     close(listenfd);
@@ -42,10 +57,15 @@ int main(int argc, char *argv[]) {
   }
 
   /* step4: accept client */
-  int clientfd; // client-side socket
-  int socklen = sizeof(struct sockaddr_in);
-  struct sockaddr_in clientaddr;
-  clientfd = accept(listenfd, (struct sockaddr *)&clientaddr, (socklen_t*)&socklen);
+  int clientfd; // client-side socket: 用于通信的scoket
+  int socklen = sizeof(sockaddr_in);
+  sockaddr_in clientaddr; // 用于存放客户端的ip
+
+  clientfd = accept(listenfd, (sockaddr *)&clientaddr, (socklen_t*)&socklen); // child socket与服务端通信
+  // 从已准备好的连接队列中获取一个请求，如果队列为空，accept函数将阻塞等待
+  // It extracts the first connection request on the queue of pending connections for the
+  // listening socket(sockfd) creates a new connected socket, and returns a new file descriptor referring to that socket.
+
   printf("client (%s) is connected\n", inet_ntoa(clientaddr.sin_addr));
 
   /* step5: communicate with client: after receive the request from client, reply "ok" */
@@ -60,7 +80,7 @@ int main(int argc, char *argv[]) {
     printf("receive: %s\n", buffer);
 
     strcpy(buffer, "ok");
-    if ((iret = send(clientfd, buffer, strlen(buffer), 0)) <= 0) {
+    if ((iret = send(clientfd, buffer, strlen(buffer), 0)) <= 0) { // send response to client
       perror("send");
       break;
     }
@@ -70,6 +90,6 @@ int main(int argc, char *argv[]) {
   /* step 6: close socket */
   close(listenfd);
   close(clientfd);
-  
+
   return 0;
 }
